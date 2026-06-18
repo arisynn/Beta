@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Doodle MMO — Sprite Version!</title>
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Nunito:wght@700;900&display=swap');
+
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+        body,html{width:100%;height:100%;overflow:hidden;touch-action:none;background:#475569;font-family:'Patrick Hand',cursive;color:#1e293b;display:flex;justify-content:center;align-items:center;}
+
+        /* ── DESKTOP & MOBILE WRAPPER ── */
+        #gameContainer {
+            position:relative; width:100%; height:100%; max-width:460px;
+            background: linear-gradient(180deg, #e0e7ff 0%, #f8fafc 100%);
+            overflow:hidden; box-shadow:0 0 40px rgba(0,0,0,0.6);
+            transition: background 0.5s ease;
+        }
+        @media (min-width: 480px) {
+            #gameContainer { height:95vh; border-radius:24px; border:8px solid #0f172a; }
+        }
+
+        /* Efek Getar Saat Jatuh */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            100% { transform: translate(0px, 0px) rotate(0deg); }
+        }
+        .shake-effect { animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both; }
+
+        .bg-grid{position:absolute;inset:0;z-index:0;pointer-events:none;
+            background-image:linear-gradient(rgba(255,255,255,0.1) 1.5px,transparent 1.5px),linear-gradient(90deg,rgba(255,255,255,0.1) 1.5px,transparent 1.5px);
+            background-size:45px 45px;}
+        .bg-grid::before{content:'';position:absolute;inset:0;
+            background:radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,0.4), transparent 70%),radial-gradient(ellipse 60% 40% at 80% 100%, rgba(255,255,255,0.2), transparent 60%);}
+
+        canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1; image-rendering: pixelated;}
+
+        /* ── HUD ── */
+        #hudLayer{position:absolute;inset:0;z-index:10;pointer-events:none;padding:12px;}
+        .hud-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;width:100%;}
+        .hud-left, .hud-right {width:50%; display:flex; flex-direction:column; gap:6px;}
+
+        .hud-card{background:rgba(255,255,255,0.92);backdrop-filter:blur(10px);
+            border:2.5px solid #1e293b;border-radius:16px;
+            box-shadow:4px 4px 0 #1e293b22;padding:10px 12px; pointer-events:auto;}
+        
+        .dot-pulse{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 1.5s infinite; flex-shrink:0;}
+        @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.4)}}
+
+        #powerBar{width:100%;height:10px;border:2.5px solid #1e293b;border-radius:999px;background:#f1f5f9;overflow:hidden;display:none; transition: opacity 0.2s;}
+        #powerFill{height:100%;width:100%;transition:width .1s;}
+
+        .lb-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1.5px dashed #cbd5e1;}
+        .lb-row:last-child{border-bottom:none;}
+        .lb-rank{width:22px;text-align:center;display:flex;justify-content:center;}
+        .lb-name{flex:1;padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.85rem;font-weight:700;}
+        .lb-score{color:#3b82f6;font-weight:900;font-size:0.85rem;}
+
+        .icon { width:18px; height:18px; flex-shrink:0; }
+        .icon-sm { width:14px; height:14px; flex-shrink:0; }
+        .flex-center { display:flex; align-items:center; gap:6px; }
+
+        /* ── LIVE TOP DROPDOWN ── */
+        #liveTopBtn{cursor:pointer;font-size:0.8rem;color:#b45309;background:#fef3c7;padding:6px 8px;border-radius:10px;font-weight:800;border:2px solid #fbbf24;display:flex;justify-content:space-between;align-items:center;transition:background .15s;}
+        #liveTopBtn:active{background:#fde68a;}
+        #liveTopContent, #lbContent{display:none;margin-top:8px;padding-top:6px;border-top:2px dashed #cbd5e1;}
+        #liveTopContent.open, #lbContent.open{display:block;}
+
+        /* ── MODAL ── */
+        #overlay{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+            background:rgba(15,23,42,.7);backdrop-filter:blur(8px);}
+        .modal{background:white;border:4px solid #1e293b;border-radius:24px;
+            box-shadow:8px 8px 0 #1e293b;padding:24px 20px;width:90%;max-width:350px;text-align:center;
+            animation:popIn .4s cubic-bezier(.34,1.56,.64,1);}
+        @keyframes popIn{from{opacity:0;transform:translateY(20px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+        .modal h1{font-size:2.4rem;font-family:'Nunito',sans-serif;font-weight:900;line-height:1;color:#1e293b;}
+        .modal h1 span{color:#3b82f6;}
+        
+        .doodle-input{width:100%;padding:12px 16px;border:3px solid #cbd5e1;border-radius:14px;
+            font-family:'Patrick Hand',cursive;font-size:1.2rem;text-align:center;outline:none;background:#f8fafc;transition:all .2s; margin-top:15px;}
+        .doodle-input:focus{border-color:#3b82f6;background:#fff;box-shadow:0 0 0 4px #bfdbfe;}
+
+        .cat-title {font-size:.8rem;color:#475569;font-weight:900;text-transform:uppercase;margin:12px 0 6px;letter-spacing:1px;}
+        .color-row{display:flex;justify-content:center;gap:10px;margin-bottom:12px;}
+        .color-dot{width:40px;height:40px;border-radius:50%;border:3px solid transparent;cursor:pointer;transition:all .2s; position:relative; overflow:hidden;}
+        .color-dot.selected{border-color:#1e293b;transform:scale(1.15);box-shadow:0 4px 10px rgba(0,0,0,0.2);}
+        
+        .char-sel{border-radius:12px; display:flex; align-items:center; justify-content:center;}
+        .char-sel img { width: 150%; height: 150%; object-fit: cover; object-position: center top; } /* Show face part */
+
+        .btn-primary{display:flex;align-items:center;justify-content:center;gap:10px;
+            width:100%;padding:14px;border:3px solid #1e40af;border-radius:14px;
+            background:linear-gradient(135deg,#3b82f6,#4f46e5);color:white;
+            font-family:'Nunito',sans-serif;font-size:1.2rem;font-weight:900;cursor:pointer;
+            box-shadow:0 6px 0 #1e40af;transition:all .1s; margin-top:16px; text-transform:uppercase;}
+        .btn-primary:active{transform:translateY(4px);box-shadow:0 2px 0 #1e40af;}
+        #errMsg{color:#ef4444;font-size:.9rem;font-weight:700;min-height:20px;margin:6px 0;}
+
+        /* ── FLOATING CHAT ── */
+        #chatFab{position:absolute;bottom:24px;right:20px;z-index:30;pointer-events:auto; display:none;}
+        #chatFabBtn{width:54px;height:54px;border-radius:50%;border:3px solid #1e293b;
+            background:white;box-shadow:4px 4px 0 #1e293b30;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;transition:transform .15s;}
+        #chatFabBtn:active{transform:scale(.92);}
+        #chatPopup{position:absolute;bottom:64px;right:0;width:260px;
+            background:rgba(255,255,255,.98);border:3px solid #1e293b;border-radius:20px;box-shadow:6px 6px 0 #1e293b22;
+            padding:12px;display:none;flex-direction:column;gap:8px;}
+        #chatPopup.open{display:flex;}
+        .qc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+        .qc-btn{background:#f1f5f9;border:2px solid #cbd5e1;border-radius:10px;padding:8px;font-family:'Patrick Hand',cursive;font-size:.9rem;font-weight:700;cursor:pointer;}
+        .qc-btn:active{background:#e2e8f0;}
+        #chatInputRow{display:flex;gap:8px;margin-top:4px;}
+        #chatTxt{flex:1;padding:8px 12px;border:2.5px solid #cbd5e1;border-radius:999px;font-family:'Patrick Hand',cursive;font-size:.9rem;outline:none;}
+        #chatTxt:focus{border-color:#3b82f6;}
+        #chatSend{width:38px;height:38px;border-radius:50%;background:#3b82f6;border:none;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center; flex-shrink:0;}
+
+        /* ── TOUCH ZONES ── */
+        #touchZone{position:absolute;bottom:0;left:0;width:100%;height:100%;z-index:5;display:none;}
+        .tz{position:absolute;bottom:0;height:65%;}
+        #tzL{left:0;width:50%;}
+        #tzR{right:0;width:50%;}
+        #tzJ{top:0;left:0;width:100%;height:35%;}
+
+        .float-txt{position:absolute;pointer-events:none;z-index:40;
+            font-family:'Nunito',sans-serif;font-weight:900;font-size:1.3rem;
+            text-shadow:0 3px 0 #000, 0 -2px 0 #000, 2px 0 0 #000, -2px 0 0 #000;
+            animation:floatUp 1.2s ease-out forwards;text-align:center;width:200px;margin-left:-100px;letter-spacing:1px;}
+        @keyframes floatUp{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-90px) scale(1.3)}}
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <div class="bg-grid"></div>
+    <canvas id="gc"></canvas>
+
+    <!-- HUD -->
+    <div id="hudLayer">
+        <div class="hud-header">
+            <!-- LEFT PANEL -->
+            <div class="hud-left">
+                <div id="scoreHud" class="hud-card" style="display:none; flex-direction:column; gap:6px;">
+                    <div class="flex-center" style="justify-content:space-between;">
+                        <div class="flex-center">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5"><path d="M21 18l-7-10-3 5-4-6-5 11h19z" fill="#fef3c7"/><path d="M21 18l-7-10-3 5-4-6-5 11h19z"/></svg>
+                            <span id="scoreVal" style="font-size:1.5rem; color:#2563eb; font-weight:900; line-height:1; font-family:'Nunito',sans-serif;">0m</span>
+                        </div>
+                        <span style="font-size:0.75rem; color:#64748b; font-weight:700;">High: <span id="highScoreVal">0m</span></span>
+                    </div>
+                    
+                    <div id="liveTopBtn">
+                        <div class="flex-center">
+                            <svg class="icon-sm" viewBox="0 0 24 24" fill="#ef4444" stroke="#b91c1c" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+                            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:65px;" id="liveTopName">-</span> 
+                            <span>(<span id="liveTopScore">0m</span>)</span>
+                        </div>
+                        <svg id="liveTopArrow" class="icon-sm" style="stroke:#b45309;" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+
+                    <div id="heartContainer" style="display:none; align-items:center; gap:6px; margin-top:4px; padding-top:6px; border-top:1.5px dashed #cbd5e1;">
+                        <svg class="icon-sm" viewBox="0 0 24 24" fill="#ef4444" stroke="#b91c1c" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                        <span style="font-size:0.75rem; font-weight:900; color:#ef4444;">1X PENYELAMAT</span>
+                    </div>
+
+                    <div id="liveTopContent"><div id="liveTopListRows"></div></div>
+                </div>
+                <!-- POWER BAR -->
+                <div id="powerBar"><div id="powerFill"></div></div>
+            </div>
+
+            <!-- RIGHT PANEL -->
+            <div class="hud-right">
+                <div id="lbPanel" class="hud-card" style="display:none; flex-direction:column; gap:6px;">
+                    <div id="lbToggle" class="flex-center" style="justify-content:space-between; cursor:pointer;">
+                        <div class="flex-center" style="font-size:0.75rem; color:#475569; font-weight:800;">
+                            <svg class="icon" viewBox="0 0 24 24" fill="#fbbf24" stroke="#d97706" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                            LEADERBOARD
+                        </div>
+                        <svg id="lbArrow" class="icon-sm" style="stroke:#94a3b8;" viewBox="0 0 24 24" fill="none" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg>
+                    </div>
+                    <div style="font-size:0.85rem; display:flex; justify-content:space-between;">
+                        <span id="lbTop1Name" style="font-weight:900; color:#2563eb; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80px;">Loading..</span>
+                        <span id="lbTop1Score" style="color:#d97706; font-weight:900; font-family:'Nunito',sans-serif;">-</span>
+                    </div>
+                    <div id="lbContent">
+                        <div id="lbRows"></div>
+                        <div style="font-size:.65rem;color:#94a3b8;margin-top:8px;text-align:center;font-weight:700;">Reset tiap 7 hari</div>
+                    </div>
+                </div>
+                
+                <div class="hud-card flex-center" style="display:none; padding:8px 12px; justify-content:center; gap:8px;" id="onlinePill">
+                    <div class="dot-pulse"></div>
+                    <span style="font-size:0.85rem; color:#475569; font-weight:700;">Online: <strong id="onlineCnt" style="color:#0f172a; font-size:1rem;">1</strong></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Screen Modal -->
+    <div id="overlay">
+        <div class="modal">
+            <h1>DOODLE <span>MMO</span></h1>
+            
+            <input type="text" class="doodle-input" id="nameInput" placeholder="Ketik Namamu..." maxlength="10">
+            <div id="errMsg"></div>
+
+            <p class="cat-title">Pilih Karakter</p>
+            <div class="color-row" id="charRow">
+                <!-- Preview menggunakan file sprites langsung di UI -->
+                <div class="color-dot char-sel selected" data-t="doodle" style="background:#e2e8f0;"><img src="./assets/spr_char_doodle.png" alt="D" onerror="this.style.display='none'"></div>
+                <div class="color-dot char-sel" data-t="jelly" style="background:#fbcfe8;"><img src="./assets/spr_char_jelly.png" alt="J" onerror="this.style.display='none'"></div>
+                <div class="color-dot char-sel" data-t="slime" style="background:#bbf7d0;"><img src="./assets/spr_char_slime.png" alt="S" onerror="this.style.display='none'"></div>
+                <div class="color-dot char-sel" data-t="ninja" style="background:#cbd5e1;"><img src="./assets/spr_char_ninja.png" alt="N" onerror="this.style.display='none'"></div>
+                <div class="color-dot char-sel" data-t="robot" style="background:#94a3b8;"><img src="./assets/spr_char_robot.png" alt="R" onerror="this.style.display='none'"></div>
+            </div>
+
+            <!-- Loader status untuk memberi tahu user jika gambar gagal termuat -->
+            <div id="assetsStatus" style="font-size: 0.75rem; color: #b45309; margin-bottom: 10px; display: none;">
+                Pastikan folder "assets" sudah dibuat!
+            </div>
+
+            <button class="btn-primary" id="startBtn">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                MULAI LOMPAT!
+            </button>
+        </div>
+    </div>
+
+    <!-- Floating Chat -->
+    <div id="chatFab">
+        <div id="chatPopup">
+            <div class="qc-grid" id="qcGrid">
+                <button class="qc-btn">Halo semua!</button>
+                <button class="qc-btn">Ayo naik!</button>
+                <button class="qc-btn">Sabar :)</button>
+                <button class="qc-btn">AAAAAA!</button>
+                <button class="qc-btn">Makasih!</button>
+                <button class="qc-btn">Aduh!</button>
+            </div>
+            <div id="chatInputRow">
+                <input type="text" id="chatTxt" placeholder="Ketik pesan..." maxlength="25">
+                <button id="chatSend"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+            </div>
+        </div>
+        <button id="chatFabBtn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </button>
+    </div>
+
+    <!-- Touch Zones -->
+    <div id="touchZone">
+        <div id="tzJ"></div>
+        <div class="tz" id="tzL"></div>
+        <div class="tz" id="tzR"></div>
+    </div>
+</div>
+
+<script>
+// ── ASSETS LOADER (IMAGE RENDERING ENGINE) ──
+const ASSETS_PATH = './assets/';
+const sprites = {
+    // Karakter
+    char_doodle: new Image(), char_jelly: new Image(), char_slime: new Image(), char_ninja: new Image(), char_robot: new Image(),
+    // Items
+    item_hat: new Image(), item_star: new Image(), item_rocket: new Image(), item_dj: new Image(), item_heart: new Image(), item_balloon: new Image(),
+    // Platform
+    plat_normal: new Image(), plat_moving: new Image(), plat_conveyor: new Image(), plat_icy: new Image(), plat_ghost: new Image(),
+    plat_updown: new Image(), plat_fragile: new Image(), plat_spring: new Image(), plat_trampoline: new Image(), plat_portal: new Image(), plat_bumper: new Image()
+};
+
+let missingAssets = false;
+// Memuat sumber file
+for (let key in sprites) {
+    sprites[key].src = `${ASSETS_PATH}spr_${key}.png`;
+    sprites[key].onerror = () => { missingAssets = true; document.getElementById('assetsStatus').style.display = 'block'; };
+}
+
+
+// ── CONFIG & SERVER RESET ──
+const UPSTASH_URL   = "https://intense-calf-74085.upstash.io";
+const UPSTASH_TOKEN = "gQAAAAAAASFlAAIgcDJjODE2YjZiYjg3OWE0M2NiOTBlMTY5MzRkODBmNzU4Nw";
+const ABLY_KEY      = '4opURQ.FVPiqg:z5W8zQxWoBNlXmlAXvOv4Bz1bmn_ISnFucJGpjFijS8';
+const LB_KEY        = 'doodle_mmo_lb_public_v2'; 
+const EXPIRE_MS     = 7 * 24 * 60 * 60 * 1000;
+
+// ── KOORDINAT ──
+const MAP_W = 420;      
+const GROUND_Y = 0;     
+
+// ── CANVAS & RESIZE ──
+const container = document.getElementById('gameContainer');
+const canvas = document.getElementById('gc');
+const ctx    = canvas.getContext('2d');
+let W = 0, H = 0, mapOffsetX = 0;
+
+function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = container.clientWidth; H = container.clientHeight;
+    canvas.width  = W * dpr; canvas.height = H * dpr;
+    ctx.scale(dpr, dpr);
+    mapOffsetX = (W - MAP_W) / 2;
+}
+window.addEventListener('resize', resize); resize();
+
+// ── STATE ──
+let gameState = 'MENU'; 
+let myId = 'dm_' + Math.random().toString(36).substr(2,8);
+let playerName  = 'Doodler';
+let playerType  = 'doodle'; 
+
+let p = {
+    x: 0, y: 0, vx: 0, vy: 0, oldY: 0, scaleX: 1, scaleY: 1, facing: 'right',
+    flyTimer: 0, rocketTimer: 0, djTimer: 0, balloonTimer: 0, hurtTimer: 0,
+    hasDJ: false, hasHeart: false, starCharges: 0, isFreeFalling: false,
+    chatMsg: '', chatTimer: 0, idleBreath: 0, isIdle: false,
+    currentPlatform: null, platOffsetX: 0, expressionTimer: 0,
+    collectedLoot: new Map() 
+};
+
+let peers = {}, platforms = new Map(), stars = new Map(), items = new Map(), particles = [];
+let camY = 0, currentMeters = 0, displayScore = 0;
+let highScore = parseInt(localStorage.getItem('doodle_hs_m12') || '0'); 
+let lastSubmittedScore = 0;
+
+document.getElementById('highScoreVal').textContent = highScore + 'm';
+
+// FISIKA
+const GRAVITY = 0.55, JUMP_FORCE = -14, SPRING_FORCE = -20, TRAMPOLINE_FORCE = -25, FLY_FORCE = -20, ROCKET_FORCE = -30, BUMPER_FORCE = -17, BOOST_FORCE = -30;
+let TERMINAL_V = 18; const MOVE_SPEED = 9;
+const PLAT_GAP = 145; 
+let keys = { left: false, right: false };
+
+
+// ── UPSTASH & LEADERBOARD ──
+async function upGet(k) { try { let r = await fetch(`${UPSTASH_URL}/get/${k}`, {headers:{Authorization:`Bearer ${UPSTASH_TOKEN}`}}); let d = await r.json(); return d.result?JSON.parse(d.result):null; }catch(e){return null;} }
+async function upSet(k,v) { try { await fetch(`${UPSTASH_URL}/set/${k}/${encodeURIComponent(JSON.stringify(v))}`, {headers:{Authorization:`Bearer ${UPSTASH_TOKEN}`}}); }catch(e){} }
+
+let leaderboard = [];
+function lbLocalLoad() { try { let d = localStorage.getItem(LB_KEY); if (d) leaderboard = JSON.parse(d); } catch(e) {} }
+function lbLocalSave() { try { localStorage.setItem(LB_KEY, JSON.stringify(leaderboard)); } catch(e) {} }
+
+async function lbFetch() {
+    let remote = await upGet(LB_KEY);
+    if (remote && Array.isArray(remote)) { leaderboard = remote.filter(e => (Date.now() - e.lastActive) < EXPIRE_MS); lbLocalSave();
+    } else { lbLocalLoad(); leaderboard = leaderboard.filter(e => (Date.now() - e.lastActive) < EXPIRE_MS); }
+    renderLB();
+}
+
+async function lbSubmit(name, sc) {
+    let now = Date.now(); let idx = leaderboard.findIndex(e => e.name.toLowerCase() === name.toLowerCase());
+    if (idx >= 0) { leaderboard[idx].lastActive = now; if (sc > leaderboard[idx].score) leaderboard[idx].score = sc; }
+    else { leaderboard.push({ name, score: sc, lastActive: now }); }
+    leaderboard.sort((a,b) => b.score - a.score); if (leaderboard.length > 10) leaderboard = leaderboard.slice(0, 10);
+    lbLocalSave(); await upSet(LB_KEY, leaderboard); renderLB();
+}
+
+function getMedalSVG(rank) {
+    const colors = ['#facc15', '#cbd5e1', '#fca5a5']; const strokes = ['#ca8a04', '#64748b', '#9a3412'];
+    let c = colors[rank-1] || '#e2e8f0'; let s = strokes[rank-1] || '#94a3b8';
+    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="${c}" stroke="${s}" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><text x="12" y="16" font-size="12" font-family="Nunito" font-weight="900" text-anchor="middle" fill="${s}" stroke="none">${rank}</text></svg>`;
+}
+
+function renderLB() {
+    const rows = document.getElementById('lbRows');
+    rows.innerHTML = leaderboard.slice(0,10).map((e,i)=>`
+        <div class="lb-row">
+            <span class="lb-rank">${i<3 ? getMedalSVG(i+1) : `<span style="font-size:0.85rem;color:#94a3b8;font-weight:900;">${i+1}</span>`}</span>
+            <span class="lb-name">${escHtml(e.name)}</span>
+            <span class="lb-score">${e.score}m</span>
+        </div>`).join('');
+    if (leaderboard.length > 0) { document.getElementById('lbTop1Name').textContent = leaderboard[0].name; document.getElementById('lbTop1Score').textContent = leaderboard[0].score + 'm'; }
+    else { document.getElementById('lbTop1Name').textContent = 'Belum ada'; document.getElementById('lbTop1Score').textContent = '-'; }
+}
+function escHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ── ABLY MULTIPLAYER ──
+let ably, chan;
+function connectAbly(name) {
+    if (ably) { try { ably.close(); } catch(e){} }
+    try {
+        ably = new Ably.Realtime({ key: ABLY_KEY, clientId: myId }); 
+        chan = ably.channels.get('doodle-mmo-public-v2'); 
+        chan.presence.subscribe(() => { chan.presence.get((err, m) => { if(m) document.getElementById('onlineCnt').textContent = m.length; }); });
+        
+        chan.subscribe('sync', msg => {
+            if (msg.clientId === myId) return; 
+            let d = msg.data, id = msg.clientId, now = Date.now();
+            if (!peers[id]) peers[id] = { buffer: [], chatTimer: 0, chatMsg: '', lastSeen: now, x: d.x, y: d.y };
+            
+            peers[id].buffer.push({
+                t: now, x: d.x, y: d.y, vx: d.vx, vy: d.vy,
+                idl: d.idl, ct: d.ct||'doodle', n: d.n, sx: d.sx, sy: d.sy,
+                f: d.f, fly: d.fly, rocket: d.rocket, dj: d.dj, bl: d.bl,
+                s: d.s, fl: d.fl, ht: d.ht
+            });
+
+            if (peers[id].buffer.length > 8) peers[id].buffer.shift();
+            peers[id].lastSeen = now;
+        });
+
+        chan.subscribe('chat', msg => {
+            if (msg.clientId === myId) { p.chatMsg = msg.data.t; p.chatTimer = 160; }
+            else if (peers[msg.clientId]) { peers[msg.clientId].chatMsg = msg.data.t; peers[msg.clientId].chatTimer = 160; }
+        });
+        chan.presence.enter({ name });
+    } catch(e) {}
+}
+
+function publishSync() {
+    if (!chan || gameState === 'MENU') return;
+    let isFallingLocal = p.isFreeFalling || p.vy > 8; 
+    chan.publish('sync', {
+        x: p.x, y: p.y, vx: parseFloat(p.vx.toFixed(2)), vy: parseFloat(p.vy.toFixed(2)), idl: p.isIdle,
+        ct: playerType, n: playerName, sx: parseFloat(p.scaleX.toFixed(2)), sy: parseFloat(p.scaleY.toFixed(2)), f: p.facing,
+        fly: p.flyTimer>0, rocket: p.rocketTimer>0, dj: p.djTimer>0, bl: p.balloonTimer>0,
+        s: currentMeters, fl: isFallingLocal, ht: p.hurtTimer>0
+    });
+}
+function sendChat(t) { if (!t) return; if (chan) chan.publish('chat', { t }); else { p.chatMsg = t; p.chatTimer = 160; } }
+
+setInterval(() => { publishSync(); let now = Date.now(); for (let id in peers) if (now - peers[id].lastSeen > 4000) delete peers[id]; }, 40); 
+setInterval(() => { if (gameState === 'PLAY' && currentMeters > lastSubmittedScore + 5) { lastSubmittedScore = currentMeters; lbSubmit(playerName, highScore); } }, 3000);
+
+// ── MAP GEN & PLATFORMS ──
+function mulberry32(seed) { return function() { let t = seed += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+function getLevelData(lvl) {
+    let rng = mulberry32(lvl * 7919 + 13337);
+    let r1 = rng(), r2 = rng(), r3 = rng(), r4 = rng();
+    
+    let pw = 160; // Disesuaikan konstan 160 karena sprite platform lebarnya fix
+    let safeWidth = MAP_W - pw - 20;
+    let px = 10 + Math.floor(r2 * safeWidth); 
+    
+    let type = 'normal';
+    if (lvl < 10) {
+        if (r3 > 0.8) type = 'moving';
+    } else if (lvl < 40) {
+        if (r3 > 0.8) type = 'conveyor';
+        else if (r3 > 0.6) type = 'moving';
+        else if (r3 > 0.5) type = 'fragile';
+        else if (r3 > 0.93) type = 'spring'; 
+    } else { 
+        if (r3 > 0.95) type = 'updown'; 
+        else if (r3 > 0.85) type = 'ghost';
+        else if (r3 > 0.75) type = 'icy';
+        else if (r3 > 0.6) type = 'conveyor';
+        else if (r3 > 0.45) type = 'moving';
+        else if (r3 > 0.4) type = 'fragile';
+        else if (r3 > 0.35) type = 'trampoline';
+        else if (r3 > 0.3) type = 'portal';
+        else if (r3 > 0.25) type = 'bumper';
+    }
+
+    return { type, pw, px, rng, r4 };
+}
+
+function generateLevel(lvl) {
+    if (lvl === 0) return { type:'ground', x: -1500, y: GROUND_Y, w: 4000 }; 
+    
+    for(let i=1; i<=2; i++) {
+        if (lvl - i > 0) {
+            let past = getLevelData(lvl - i);
+            if (past.type === 'updown') return null; 
+        }
+    }
+
+    let d = getLevelData(lvl);
+    let type = d.type;
+
+    if (lvl > 1) {
+        let prevD = getLevelData(lvl - 1);
+        if (['fragile', 'ghost', 'portal'].includes(prevD.type) && ['fragile', 'ghost', 'portal'].includes(type)) {
+            type = d.rng() > 0.5 ? 'normal' : 'moving';
+        }
+    }
+
+    let item = null, hasStar = false;
+    let r_item = d.rng();
+    
+    if (type !== 'updown') {
+        if (['normal', 'moving', 'icy', 'conveyor'].includes(type) && lvl > 5 && r_item > 0.92) {
+            let r_which = d.rng();
+            if (r_which > 0.8) item = 'rocket';
+            else if (r_which > 0.6) item = 'hat';
+            else if (r_which > 0.4) item = 'dj'; 
+            else if (r_which > 0.2) item = 'heart'; 
+            else item = 'balloon';
+        } else if (r_item < 0.05) {
+            hasStar = true; 
+        }
+    }
+
+    let speed = 1.5 + d.rng() * 1.5;
+    let dir = d.rng() > 0.5 ? 1 : -1;
+
+    return { type, x: d.px, y: GROUND_Y - lvl * PLAT_GAP, w: d.pw, item, hasStar, baseX: d.px, speed, dir };
+}
+
+// ── NEW: SPRITE ENGINE DRAWING ──
+class Platform {
+    constructor(lvl, data) {
+        this.lvl = lvl; Object.assign(this, data);
+        this.broken = false; this.fallVy = 0; this.restoreTimer = 0; this.bounceAnim = 0; this.startY = data.y;
+        this.isSolid = true; this.tilt = 0; this.isCracking = false; this.crackTimer = 0;
+    }
+    getX() { 
+        if (this.type === 'moving') {
+            let maxRange = MAP_W - this.w - 20;
+            return 10 + (Math.sin((Date.now() + this.lvl * 1000) / (1500 / this.speed)) * 0.5 + 0.5) * maxRange;
+        }
+        return this.x; 
+    }
+    update() {
+        if (this.bounceAnim > 0) this.bounceAnim--;
+        if (this.type === 'moving') this.x = this.getX();
+        if (this.type === 'fragile') {
+            if (this.isCracking && !this.broken) {
+                this.crackTimer--;
+                if (this.crackTimer <= 0) {
+                    this.broken = true; this.fallVy = 0; this.restoreTimer = 150;
+                    spawnParticles(this.x + this.w/2, this.y, '#f59e0b', 15);
+                }
+            }
+            if (this.broken) {
+                this.fallVy += GRAVITY; this.y += this.fallVy; this.restoreTimer--;
+                if (this.restoreTimer <= 0) { 
+                    this.broken = false; this.isCracking = false; this.y = this.startY; this.fallVy = 0; 
+                    spawnParticles(this.x + this.w/2, this.y, '#fff', 8); 
+                }
+            }
+        }
+        if (this.type === 'updown') {
+            this.y = this.startY - (Math.sin((Date.now() + this.lvl * 500) / 600) * 0.5 + 0.5) * (PLAT_GAP * 1.8);
+        }
+    }
+    draw() {
+        if (this.type === 'ground') {
+            ctx.save(); ctx.fillStyle = '#22c55e'; ctx.fillRect(this.x, this.y, this.w, H + 2000); 
+            ctx.fillStyle = '#166534'; ctx.fillRect(this.x, this.y, this.w, 15); ctx.restore(); return;
+        }
+
+        let cx = this.x + this.w/2, cy = this.y;
+        let img = sprites['plat_' + this.type] || sprites.plat_normal;
+        let frameIndex = 0;
+        let w = 160, h = 80;
+
+        // Logika Animasi Sprite Platform
+        if (this.type === 'conveyor') {
+            frameIndex = Math.floor(Date.now() / 150) % 4;
+            // Reverse animasi berdasarkan arah
+            if (this.dir < 0) frameIndex = (3 - frameIndex);
+        } else if (this.type === 'ghost' || this.type === 'portal') {
+            frameIndex = Math.floor((Date.now() + this.lvl * 300) / 150) % 4;
+            if (this.type === 'ghost') {
+                this.isSolid = (frameIndex !== 2); // Frame ke-3 adalah fade transparan
+            }
+        } else if (this.type === 'fragile') {
+            frameIndex = this.broken ? 2 : (this.isCracking ? 1 : 0);
+        } else if (this.type === 'spring' || this.type === 'trampoline') {
+            frameIndex = this.bounceAnim > 0 ? (this.bounceAnim > 7 ? 2 : 1) : 0;
+        } else if (this.type === 'bumper') {
+            frameIndex = this.bounceAnim > 0 ? (this.bounceAnim > 7 ? 1 : 2) : 0;
+        }
+
+        let sx = frameIndex * w;
+
+        ctx.save();
+        if (this.type === 'icy' && this.tilt !== 0) {
+            ctx.translate(cx, cy);
+            ctx.rotate(this.tilt);
+            ctx.translate(-cx, -cy);
+        }
+        
+        let shakeX = (this.type === 'fragile' && this.isCracking && !this.broken) ? (Math.random()-0.5)*4 : 0;
+        let shakeY = (this.type === 'fragile' && this.isCracking && !this.broken) ? (Math.random()-0.5)*4 : 0;
+
+        // cy pada engine sebelumnya ada di atas balok, file PNG pusatnya ada di center gambar (40px)
+        // Offset Y adalah -40
+        if (img.complete && img.naturalHeight > 0) {
+            ctx.drawImage(img, sx, 0, w, h, (cx - w/2) + shakeX, (cy - 40) + shakeY, w, h);
+        }
+        ctx.restore();
+    }
+}
+
+class SpriteItem {
+    constructor(id, x, y, type) { this.id = id; this.x = x; this.y = y-32; this.type = type; this.t = 0; }
+    update() { this.t += 0.08; }
+    draw() {
+        let img = sprites['item_' + this.type];
+        if (!img || !img.complete || img.naturalWidth === 0) return;
+
+        let frameIndex = Math.floor(Date.now() / 120) % 4; // Semua item punya 4 frame
+        let w = 80, h = 80;
+        let floatY = Math.sin(this.t) * 6;
+
+        ctx.save();
+        ctx.drawImage(img, frameIndex * w, 0, w, h, this.x - w/2, this.y - h/2 + floatY, w, h);
+        ctx.restore();
+    }
+}
+
+function spawnParticles(x, y, color, amt) { for(let i=0;i<amt;i++) particles.push({ x, y, vx:(Math.random()-.5)*12, vy:(Math.random()-.5)*12, life:1, c:color, s:Math.random()*5+2, type: Math.random()>.5?'circle':'line' }); }
+
+function floatText(x, y, text, color='#fbbf24') {
+    const el = document.createElement('div'); el.className = 'float-txt'; el.textContent = text; el.style.color = color;
+    el.style.left = (x + mapOffsetX) + 'px'; 
+    el.style.top  = (y - camY - 30) + 'px'; document.getElementById('gameContainer').appendChild(el); setTimeout(() => el.remove(), 1200);
+}
+
+function buildMap() { 
+    platforms.clear(); stars.clear(); items.clear(); 
+    let topLvl = Math.floor((GROUND_Y - camY + H) / PLAT_GAP) + 20;
+    let botLvl = Math.max(0, Math.floor((GROUND_Y - (camY+H)) / PLAT_GAP) - 5);
+    for (let i=botLvl; i <= topLvl; i++) {
+        let l = generateLevel(i);
+        if (l) {
+            let pl = new Platform(i, l); platforms.set(i, pl);
+            if (l.hasStar) stars.set(i, new SpriteItem('st_'+i, l.x + l.w/2, l.y, 'star')); 
+            if (l.item) items.set(i, new SpriteItem('it_'+i, l.x + l.w/2, l.y, l.item));
+        }
+    }
+}
+
+function initLevel(lvl) {
+    if (platforms.has(lvl)) return; 
+    let l = generateLevel(lvl); 
+    if (l) {
+        let pl = new Platform(lvl, l); platforms.set(lvl, pl);
+        if (l.hasStar) stars.set(lvl, new SpriteItem('st_'+lvl, l.x + l.w/2, l.y, 'star')); 
+        if (l.item) items.set(lvl, new SpriteItem('it_'+lvl, l.x + l.w/2, l.y, l.item));
+    }
+}
+
+function resetGame() {
+    p.vy = JUMP_FORCE; p.vx = 0;
+    p.flyTimer=0; p.rocketTimer=0; p.djTimer=0; p.balloonTimer=0; p.hurtTimer=0;
+    p.hasDJ=false; p.hasHeart=false;
+    p.scaleX=1; p.scaleY=1; p.isIdle=false; p.currentPlatform=null; p.facing='right'; 
+    p.platOffsetX = 0; p.isFreeFalling = false;
+    p.collectedLoot.clear(); p.expressionTimer=0;
+    particles=[];
+
+    p.x = MAP_W/2; p.y = GROUND_Y - 80; camY = GROUND_Y - H + 20; currentMeters = 0; displayScore = 0;
+    p.starCharges = 0; lastSubmittedScore = 0;
+    
+    buildMap(); 
+    document.getElementById('scoreVal').textContent = Math.floor(displayScore) + 'm';
+    document.getElementById('powerBar').style.display = 'none';
+    gameState = 'PLAY';
+}
+
+// ── NEW: CHARACTER SPRITE RENDERING ──
+function drawCharacter(cx, cy, scX, scY, name, facing, flyT, rocketT, djT, blT, chatMsg, chatTimer, isFalling, charType, isHurt, vy) {
+    let img = sprites['char_' + charType] || sprites.char_doodle;
+    if (!img.complete || img.naturalWidth === 0) return; // Tunggu aset diload
+
+    ctx.save();
+    let eox = (facing === 'right') ? 5 : (facing === 'left') ? -5 : 0;
+    let nameYOffset = 45;
+
+    // Gambar Nama & Chat
+    ctx.save();
+    ctx.translate(cx, cy - nameYOffset);
+    ctx.font = `900 14px 'Nunito',sans-serif`; ctx.textAlign='center';
+    ctx.strokeStyle='white'; ctx.lineWidth=3.5; ctx.strokeText(name, 0, 0);
+    ctx.fillStyle='#1e293b'; ctx.fillText(name, 0, 0);
+    
+    if (chatTimer > 0 && chatMsg) {
+        ctx.font = "700 13px 'Patrick Hand',cursive"; let tw = Math.max(50, ctx.measureText(chatMsg).width + 20), th=28;
+        ctx.translate(0, -32); ctx.fillStyle='rgba(255,255,255,.96)'; ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.roundRect(-tw/2,-th,tw,th,12); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-6,0); ctx.lineTo(6,0); ctx.lineTo(0,7); ctx.fill();
+        ctx.fillStyle='#0f172a'; ctx.textBaseline='middle'; ctx.fillText(chatMsg, 0, -th/2);
+    }
+    ctx.restore();
+
+    // Tentukan Frame Berdasarkan Kondisi Karakter
+    let frameIndex = 0; // Idle Default
+    let isExcited = (vy < -8 || rocketT > 0 || flyT > 0 || djT > 0);
+    
+    if (isHurt) {
+        frameIndex = 3;
+    } else if (isFalling) {
+        frameIndex = 2;
+    } else if (isExcited) {
+        frameIndex = 1;
+    }
+
+    let w = 80, h = 80;
+    let sx = frameIndex * w;
+
+    ctx.translate(cx, cy);
+    ctx.scale(scX, scY);
+
+    // Peralatan/Aksesoris Visual Ekstra untuk Booster (Selain image bawaan)
+    if (blT > 0 && sprites.item_balloon.complete) {
+        ctx.drawImage(sprites.item_balloon, 0, 0, 80, 80, -40, -80, 80, 80);
+        ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(0,-30); ctx.lineTo(0,-15); ctx.stroke();
+    }
+    if (rocketT > 0 && sprites.item_rocket.complete) {
+        ctx.drawImage(sprites.item_rocket, (Math.floor(Date.now() / 100)%4)*80, 0, 80, 80, -40, -55, 80, 80);
+        if (rocketT % 2===0) spawnParticles(cx, cy+5, '#f97316', 1);
+    }
+    if (flyT > 0 && sprites.item_hat.complete) {
+        ctx.drawImage(sprites.item_hat, (Math.floor(Date.now() / 80)%4)*80, 0, 80, 80, -40, -75, 80, 80);
+    }
+    if (djT > 0 && sprites.item_dj.complete) {
+        ctx.drawImage(sprites.item_dj, (Math.floor(Date.now() / 150)%4)*80, 0, 80, 80, -40, -45, 80, 80);
+    }
+
+    // Render Gambar Karakter
+    if (facing === 'left') {
+        ctx.scale(-1, 1);
+    }
+    
+    // Y-Offset kaki adalah titik tengah (40) plus offset kaki (+15 di sprite sheet generator) = ~55
+    ctx.drawImage(img, sx, 0, w, h, -w/2, -55, w, h);
+
+    ctx.restore();
+}
+
+function updateLiveTopUI() {
+    let allPlayers = [{ n: playerName, s: currentMeters }];
+    for (let id in peers) allPlayers.push({ n: peers[id].buffer.length ? peers[id].buffer[peers[id].buffer.length-1].n : '', s: peers[id].buffer.length ? peers[id].buffer[peers[id].buffer.length-1].s : 0 });
+    allPlayers.sort((a,b) => b.s - a.s); let top5 = allPlayers.slice(0, 5);
+    document.getElementById('liveTopName').textContent = top5[0].s === 0 ? "-" : top5[0].n;
+    document.getElementById('liveTopScore').textContent = top5[0].s + 'm';
+    document.getElementById('liveTopListRows').innerHTML = top5.map((p, i) => `
+        <div class="lb-row">
+            <span class="lb-rank" style="font-size:0.85rem; font-weight:900; color:#d97706;">#${i+1}</span>
+            <span class="lb-name" style="font-size:0.85rem; color:#1e293b;">${escHtml(p.n)}</span>
+            <span class="lb-score" style="font-size:0.9rem; color:#b45309;">${p.s}m</span>
+        </div>
+    `).join('');
+}
+
+function triggerJump() {
+    if (gameState !== 'PLAY') return;
+    if (p.isIdle && p.currentPlatform) {
+        p.isIdle = false;
+        let pl = p.currentPlatform;
+        p.currentPlatform = null;
+        let f = p.starCharges > 0 ? BOOST_FORCE : JUMP_FORCE;
+        if (p.starCharges > 0) { p.starCharges--; spawnParticles(p.x, p.y, '#fbbf24', 25); floatText(p.x, p.y, 'SUPER JUMP!', '#f59e0b'); }
+        p.vy = f;
+        p.hasDJ = true;
+        if (pl && pl.type === 'fragile') {
+            pl.broken = true; pl.isCracking = false; pl.restoreTimer = 150;
+            spawnParticles(pl.x + pl.w/2, pl.y, '#f59e0b', 15);
+        }
+    } else if (p.djTimer > 0 && p.hasDJ && !p.isFreeFalling) {
+        p.vy = JUMP_FORCE;
+        p.hasDJ = false; 
+        spawnParticles(p.x, p.y + 10, '#3b82f6', 20);
+        floatText(p.x, p.y, 'DOUBLE JUMP!', '#60a5fa');
+    }
+}
+
+function triggerScreenShake() {
+    const gc = document.getElementById('gameContainer');
+    gc.classList.remove('shake-effect');
+    void gc.offsetWidth; 
+    gc.classList.add('shake-effect');
+}
+
+function loop() {
+    requestAnimationFrame(loop); ctx.clearRect(0,0,W,H);
+    if (gameState === 'MENU') return;
+
+    let heightRatio = Math.min(1, currentMeters / 1000); 
+    let r1 = Math.floor(224 - (224 - 15) * heightRatio); 
+    let g1 = Math.floor(231 - (231 - 23) * heightRatio);
+    let b1 = Math.floor(255 - (255 - 42) * heightRatio);
+    let r2 = Math.floor(248 - (248 - 30) * heightRatio); 
+    let g2 = Math.floor(250 - (250 - 27) * heightRatio);
+    let b2 = Math.floor(252 - (252 - 75) * heightRatio);
+    document.getElementById('gameContainer').style.background = `linear-gradient(180deg, rgb(${r1},${g1},${b1}) 0%, rgb(${r2},${g2},${b2}) 100%)`;
+
+    p.oldY = p.y; p.expressionTimer++; 
+    if (p.chatTimer > 0) p.chatTimer--;
+    if (p.hurtTimer > 0) p.hurtTimer--; 
+    
+    // HUD POWER BAR 
+    const pwrCon = document.getElementById('powerBar'), pwrFill = document.getElementById('powerFill');
+    if (p.rocketTimer > 0) { pwrCon.style.display='block'; pwrFill.style.width=(p.rocketTimer/80*100)+'%'; pwrFill.style.background='#ef4444'; }
+    else if (p.flyTimer > 0) { pwrCon.style.display='block'; pwrFill.style.width=(p.flyTimer/150*100)+'%'; pwrFill.style.background='#60a5fa'; }
+    else if (p.djTimer > 0) { pwrCon.style.display='block'; pwrFill.style.width=(p.djTimer/600*100)+'%'; pwrFill.style.background='#fde047'; }
+    else if (p.balloonTimer > 0) { pwrCon.style.display='block'; pwrFill.style.width=(p.balloonTimer/400*100)+'%'; pwrFill.style.background='#f43f5e'; }
+    else if (p.starCharges > 0) { pwrCon.style.display='block'; pwrFill.style.width='100%'; pwrFill.style.background='#fbbf24'; }
+    else { pwrCon.style.display = 'none'; }
+
+    document.getElementById('heartContainer').style.display = p.hasHeart ? 'flex' : 'none';
+
+    currentMeters = Math.max(0, Math.floor((GROUND_Y - p.y) / 50));
+    if (gameState === 'PLAY' && currentMeters > highScore) { 
+        highScore = currentMeters; document.getElementById('highScoreVal').textContent = highScore + 'm'; 
+        localStorage.setItem('doodle_hs_m12', highScore); 
+    }
+    
+    if (displayScore < currentMeters) displayScore = currentMeters; 
+    else if (displayScore > currentMeters) { displayScore -= Math.max(1, (displayScore - currentMeters) * 0.08); if (displayScore < currentMeters) displayScore = currentMeters; }
+    document.getElementById('scoreVal').textContent = Math.floor(displayScore) + 'm';
+
+    TERMINAL_V = (p.balloonTimer > 0 && p.vy > 0) ? 4 : 18; 
+
+    if (p.rocketTimer > 0) { p.rocketTimer--; p.vy = ROCKET_FORCE; }
+    else if (p.flyTimer > 0) { p.flyTimer--; p.vy = FLY_FORCE; }
+    else { p.vy += GRAVITY; if (p.vy > TERMINAL_V) p.vy = TERMINAL_V; }
+    
+    if (p.djTimer > 0) p.djTimer--;
+    if (p.balloonTimer > 0) p.balloonTimer--;
+
+    let targetVx = 0;
+    
+    for (let [k, pl] of platforms) {
+        if (pl.type === 'icy') {
+            if (p.currentPlatform === pl && p.isIdle && !p.isFreeFalling) {
+                let center = pl.x + pl.w / 2;
+                let offset = p.x - center;
+                let maxTilt = 0.35;
+                let targetTilt = (offset / (pl.w / 2)) * maxTilt;
+                pl.tilt += (targetTilt - pl.tilt) * 0.15; 
+                
+                p.vx += Math.sin(pl.tilt) * 2.5; 
+            } else {
+                pl.tilt += (0 - pl.tilt) * 0.05; 
+            }
+        }
+    }
+
+    if (p.isIdle) {
+        if (!p.currentPlatform || p.currentPlatform.type !== 'icy') { p.vx = 0; }
+        p.vy = 0; 
+        
+        if (p.currentPlatform) {
+            let pl = p.currentPlatform;
+            if (pl.type === 'conveyor') {
+                p.x += pl.dir * 2.5;
+                p.platOffsetX = p.x - pl.x;
+            }
+            if (pl.type === 'updown') {
+                p.y = pl.y; 
+            }
+            if (pl.type === 'fragile' && pl.broken) {
+                p.isIdle = false; p.currentPlatform = null; 
+            }
+            
+            if (p.currentPlatform && (p.x < pl.x || p.x > pl.x + pl.w)) {
+                p.isIdle = false; p.currentPlatform = null;
+            }
+        }
+
+        if (p.isIdle && (keys.left || keys.right)) { 
+            p.isIdle = false; 
+            let pl = p.currentPlatform;
+            p.currentPlatform = null; 
+            let f = p.starCharges > 0 ? BOOST_FORCE : JUMP_FORCE;
+            if (p.starCharges > 0) { p.starCharges--; spawnParticles(p.x, p.y, '#fbbf24', 25); floatText(p.x, p.y, 'SUPER JUMP!', '#f59e0b'); }
+            p.vy = f;
+
+            if (pl && pl.type === 'fragile') {
+                pl.broken = true; pl.isCracking = false; pl.restoreTimer = 150;
+                spawnParticles(pl.x + pl.w/2, pl.y, '#f59e0b', 15);
+            }
+        }
+    } else {
+        if (keys.left) { targetVx = -MOVE_SPEED; p.facing = 'left'; }
+        else if (keys.right) { targetVx = MOVE_SPEED; p.facing = 'right'; }
+        
+        let friction = (p.currentPlatform && p.currentPlatform.type === 'icy') ? 0.05 : 0.3;
+        p.vx += (targetVx - p.vx) * friction;
+    }
+
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < -25) p.x = MAP_W+25; else if (p.x > MAP_W+25) p.x = -25;
+
+    let targetSx = 1, targetSy = 1;
+    if (p.isIdle) {
+        p.idleBreath += 0.08;
+        let bX = (playerType==='jelly')?0.03:(playerType==='slime')?0.02:0.01;
+        let bY = (playerType==='jelly')?0.02:(playerType==='slime')?0.015:0.005;
+        targetSx = 1 + Math.sin(p.idleBreath) * bX;
+        targetSy = 1 - Math.sin(p.idleBreath) * bY;
+    }
+    p.scaleX += (targetSx - p.scaleX) * 0.3;
+    p.scaleY += (targetSy - p.scaleY) * 0.3;
+
+    if (gameState === 'PLAY' && p.y > camY + H + 50 && !p.isFreeFalling) {
+        if (p.hasHeart) {
+            p.hasHeart = false; p.vy = -45; p.y = camY + H - 10;
+            spawnParticles(p.x, p.y, '#ef4444', 30);
+            p.chatMsg = 'Untung ada nyawa!'; p.chatTimer = 100; if(chan) chan.publish('chat', {t: p.chatMsg});
+            floatText(p.x, p.y, 'PENYELAMATAN!', '#ef4444');
+        } else {
+            p.isFreeFalling = true;
+            p.chatMsg = 'AAAAAA!!!'; p.chatTimer = 100; if (chan) chan.publish('chat',{t:'AAAAAA!!!'});
+        }
+    }
+
+    if (p.y >= GROUND_Y) {
+        p.y = GROUND_Y;
+        if (p.isFreeFalling) {
+            p.vy = 0; p.vx = 0; p.isFreeFalling = false;
+            spawnParticles(p.x, GROUND_Y, '#ef4444', 40);
+            triggerScreenShake(); 
+            p.chatMsg = 'Aduh... Ayo naik!'; p.chatTimer = 120; 
+            p.hurtTimer = 40; 
+            if (chan) chan.publish('chat', {t: 'Aduh... Ayo naik!'});
+            lbSubmit(playerName, highScore); 
+            p.isIdle = true; p.hasDJ = true; p.currentPlatform = null;
+        } else if (p.vy > 0) {
+            if (!keys.left && !keys.right) { 
+                p.isIdle = true; p.currentPlatform = null; p.idleBreath = 0; p.platOffsetX = 0; p.vy = 0; p.vx = 0; p.hasDJ = true;
+            } else { p.vy = JUMP_FORCE; p.hasDJ = true; }
+            spawnParticles(p.x, p.y+5, '#e2e8f0', 5);
+        }
+    }
+
+    if (p.isFreeFalling) { 
+        camY += ((p.y - H/2) - camY) * 0.15; 
+    } else if (gameState === 'PLAY') { 
+        let tCam = p.y - H*.52; 
+        if (tCam < camY) {
+            camY += (tCam-camY)*.22; 
+        } else if (p.currentPlatform && p.currentPlatform.type === 'updown') {
+            let limitCam = p.y - H*.65;
+            if (camY < limitCam) camY += (limitCam - camY) * 0.15;
+        }
+    }
+
+    let maxCamY = GROUND_Y - H + 20; if (camY > maxCamY) camY = maxCamY;
+
+    let topLvl = Math.floor((GROUND_Y - camY + H) / PLAT_GAP) + 6; 
+    let botLvl = Math.max(0, Math.floor((GROUND_Y - (camY+H)) / PLAT_GAP) - 3);
+    for (let l=botLvl; l<=topLvl; l++) initLevel(l);
+    for (let [k,v] of platforms) if (k>0 && (k<botLvl-8||k>topLvl+8)) { platforms.delete(k); stars.delete(k); items.delete(k); }
+
+    updateLiveTopUI(); 
+    ctx.save(); ctx.translate(mapOffsetX, -camY);
+
+    for (let [k,pl] of platforms) { pl.update(); pl.draw(); }
+
+    if (gameState === 'PLAY') {
+        if (!p.isFreeFalling) {
+            for (let [k,s] of stars) {
+                if (p.collectedLoot.has(s.id) && Date.now() - p.collectedLoot.get(s.id) < 5000) continue;
+                s.update(); s.draw();
+                if (p.flyTimer<=0 && p.rocketTimer<=0 && Math.abs(p.x-s.x)<35 && p.y>s.y-35 && p.y<s.y+22) { 
+                    p.collectedLoot.set(s.id, Date.now()); 
+                    p.starCharges = 1; 
+                    spawnParticles(s.x, s.y, '#fbbf24', 15); floatText(s.x, s.y, 'BINTANG AKTIF!', '#f59e0b'); 
+                }
+            }
+            for (let [k,it] of items) {
+                if (p.collectedLoot.has(it.id) && Date.now() - p.collectedLoot.get(it.id) < 5000) continue;
+                it.update(); it.draw();
+                if (p.flyTimer <= 0 && p.rocketTimer <= 0) {
+                    if (Math.abs(p.x-it.x)<38 && p.y>it.y-38 && p.y<it.y+25) {
+                        p.collectedLoot.set(it.id, Date.now()); spawnParticles(it.x, it.y, '#fff', 20);
+                        if (it.type==='hat') { p.flyTimer=150; floatText(it.x,it.y,'TERBANG!','#60a5fa'); } 
+                        if (it.type==='rocket') { p.rocketTimer=80; floatText(it.x,it.y,'ROKET!','#ef4444'); } 
+                        if (it.type==='dj') { p.djTimer=600; p.hasDJ=true; floatText(it.x,it.y,'DOUBLE JUMP!','#fde047'); }
+                        if (it.type==='heart') { p.hasHeart=true; floatText(it.x,it.y,'NYAWA EXTRA!','#ef4444'); }
+                        if (it.type==='balloon') { p.balloonTimer=400; floatText(it.x,it.y,'BALON JATUH LAMBAT!','#f43f5e'); }
+                    }
+                }
+            }
+        } else {
+            for (let [k,s] of stars) if(!(p.collectedLoot.has(s.id) && Date.now()-p.collectedLoot.get(s.id)<5000)) s.draw();
+            for (let [k,it] of items) if(!(p.collectedLoot.has(it.id) && Date.now()-p.collectedLoot.get(it.id)<5000)) it.draw();
+        }
+    }
+
+    if (gameState === 'PLAY' && p.vy > 0 && p.flyTimer<=0 && p.rocketTimer<=0 && !p.isIdle && !p.isFreeFalling) {
+        for (let [k,pl] of platforms) {
+            if (pl.broken || !pl.isSolid || pl.y > camY + H + 10) continue; 
+            
+            let rx = pl.x;
+            let hitY = pl.y;
+            if (pl.type === 'icy' && pl.tilt !== 0) {
+                hitY = pl.y + Math.tan(pl.tilt) * (p.x - (rx + pl.w/2));
+            }
+
+            if (p.x+16 > rx && p.x-16 < rx+pl.w && p.oldY <= hitY+15 && p.y >= hitY-10) {
+                p.y = hitY; p.hasDJ = true;
+
+                if (pl.type==='portal') { spawnParticles(p.x, p.y, '#a855f7', 20); p.y -= 1000; camY -= 1000; p.vy = JUMP_FORCE; break; }
+                if (pl.type==='bumper') { p.vy = BUMPER_FORCE; p.vx = (p.x < rx+pl.w/2) ? -16 : 16; spawnParticles(p.x,p.y,'#f0abfc',12); pl.bounceAnim=15; break; }
+                if (pl.type==='fragile') {
+                    if (!pl.isCracking) { pl.isCracking = true; pl.crackTimer = 45; } 
+                    if (!keys.left && !keys.right) {
+                        p.isIdle=true; p.currentPlatform=pl; p.idleBreath=0; p.platOffsetX=p.x-pl.x; p.vy=0;
+                    } else {
+                        p.vy=JUMP_FORCE; pl.broken=true; pl.isCracking=false; pl.restoreTimer=150;
+                        spawnParticles(rx+pl.w/2, pl.y, '#f59e0b', 15);
+                    }
+                    break; 
+                }
+                if (pl.type==='spring') { p.vy=SPRING_FORCE; pl.bounceAnim=15; spawnParticles(p.x,p.y,'#fde047',8); break; }
+                if (pl.type==='trampoline') { p.vy=TRAMPOLINE_FORCE; pl.bounceAnim=15; spawnParticles(p.x,p.y,'#fca5a5',10); break; }
+                
+                if (!keys.left && !keys.right) { 
+                    p.isIdle=true; p.currentPlatform=pl; p.idleBreath=0; p.platOffsetX = p.x - pl.x; 
+                } else { 
+                    p.vy=JUMP_FORCE; p.currentPlatform=pl; 
+                }
+                break;
+            }
+        }
+    }
+
+    if (p.isIdle && p.currentPlatform && p.currentPlatform.type === 'moving') { 
+        p.x = p.currentPlatform.x + p.platOffsetX; 
+    }
+
+    for (let i=particles.length-1;i>=0;i--) {
+        let pt=particles[i]; pt.x+=pt.vx; pt.y+=pt.vy; pt.life-=.04;
+        if (pt.life<=0) { particles.splice(i,1); continue; }
+        ctx.globalAlpha=pt.life; ctx.fillStyle=ctx.strokeStyle=pt.c; ctx.lineWidth=2; ctx.beginPath();
+        if (pt.type==='circle') ctx.arc(pt.x,pt.y,pt.s,0,Math.PI*2); else { ctx.moveTo(pt.x,pt.y); ctx.lineTo(pt.x+pt.vx*2,pt.y+pt.vy*2); ctx.stroke(); }
+        ctx.fill(); ctx.globalAlpha=1;
+    }
+
+    // MULTIPLAYER RENDER 
+    let renderDelay = 80; 
+    let renderTime = Date.now() - renderDelay;
+    for (let id in peers) {
+        let op = peers[id]; 
+        
+        if (op.chatTimer > 0) op.chatTimer--;
+
+        let buf = op.buffer;
+        if (!buf || buf.length === 0) continue;
+        let s0 = null, s1 = null; let targetX, targetY, targetSx, targetSy;
+        let refState = buf[buf.length - 1]; 
+        for (let i = 0; i < buf.length - 1; i++) {
+            if (buf[i].t <= renderTime && buf[i+1].t >= renderTime) { s0 = buf[i]; s1 = buf[i+1]; break; }
+        }
+        if (s0 && s1) {
+            let ratio = (renderTime - s0.t) / (s1.t - s0.t);
+            targetX = s0.x + (s1.x - s0.x) * ratio; targetY = s0.y + (s1.y - s0.y) * ratio;
+            targetSx = s0.sx + (s1.sx - s0.sx) * ratio; targetSy = s0.sy + (s1.sy - s0.sy) * ratio;
+            refState = s0; 
+        } else {
+            if (op.x === undefined) { op.x = refState.x; op.y = refState.y; }
+            targetX = refState.x; targetY = refState.y;
+            targetSx = refState.sx; targetSy = refState.sy;
+        }
+        
+        op.x += (targetX - op.x) * 0.3; op.y += (targetY - op.y) * 0.3;
+
+        drawCharacter(op.x, op.y, targetSx||1, targetSy||1, refState.n, refState.f||'right', refState.fly?30:0, refState.rocket?30:0, refState.dj?30:0, refState.bl?30:0, op.chatMsg||'', op.chatTimer||0, refState.fl, refState.ct||'doodle', refState.ht, refState.vy||0);
+    }
+    
+    let isFallingLocal = p.isFreeFalling || p.vy > 8;
+    drawCharacter(p.x, p.y, p.scaleX, p.scaleY, playerName, p.facing, p.flyTimer, p.rocketTimer, p.djTimer, p.balloonTimer, p.chatMsg, p.chatTimer, isFallingLocal, playerType, p.hurtTimer > 0, p.vy);
+    
+    ctx.restore(); 
+}
+
+// ── UI INTERACTIONS & INPUT ──
+document.getElementById('lbToggle').onclick = () => { let c = document.getElementById('lbContent'), a = document.getElementById('lbArrow'); c.classList.toggle('open'); a.style.transform = c.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)'; };
+document.getElementById('liveTopBtn').onclick = () => { let c = document.getElementById('liveTopContent'), a = document.getElementById('liveTopArrow'); c.classList.toggle('open'); a.style.transform = c.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)'; };
+
+document.querySelectorAll('.char-sel').forEach(btn => { btn.onclick = () => { document.querySelectorAll('.char-sel').forEach(b=>b.classList.remove('selected')); btn.classList.add('selected'); playerType = btn.dataset.t; }; });
+
+document.getElementById('startBtn').onclick = () => {
+    let name = document.getElementById('nameInput').value.trim(); const err = document.getElementById('errMsg');
+    if (!name) { err.textContent = 'Masukkan nama dulu!'; return; } if (name.length < 2) { err.textContent = 'Minimal 2 huruf!'; return; }
+    
+    playerName = name;
+    localStorage.setItem('doodle_n12', playerName); localStorage.setItem('doodle_t12', playerType);
+
+    document.getElementById('overlay').style.display = 'none'; document.getElementById('scoreHud').style.display = 'flex'; document.getElementById('onlinePill').style.display = 'flex'; document.getElementById('chatFab').style.display = 'block'; document.getElementById('touchZone').style.display = 'block';
+    connectAbly(name); resetGame(); lbFetch();
+};
+
+let savedName = localStorage.getItem('doodle_n12'); let savedType = localStorage.getItem('doodle_t12');
+if (savedName) document.getElementById('nameInput').value = savedName;
+if (savedType) { playerType = savedType; document.querySelectorAll('.char-sel').forEach(btn => { btn.classList.remove('selected'); if (btn.dataset.t === savedType) btn.classList.add('selected'); }); }
+
+document.getElementById('tzL').addEventListener('touchstart',e=>{if(gameState==='PLAY'){e.preventDefault();keys.left=true;p.facing='left';}},{passive:false});
+document.getElementById('tzL').addEventListener('touchend',  e=>{if(gameState==='PLAY'){e.preventDefault();keys.left=false;}},{passive:false});
+document.getElementById('tzR').addEventListener('touchstart',e=>{if(gameState==='PLAY'){e.preventDefault();keys.right=true;p.facing='right';}},{passive:false});
+document.getElementById('tzR').addEventListener('touchend',  e=>{if(gameState==='PLAY'){e.preventDefault();keys.right=false;}},{passive:false});
+document.getElementById('tzL').addEventListener('mousedown',()=>{keys.left=true;p.facing='left';}); 
+document.getElementById('tzL').addEventListener('mouseup',()=>{keys.left=false;});
+document.getElementById('tzR').addEventListener('mousedown',()=>{keys.right=true;p.facing='right';}); 
+document.getElementById('tzR').addEventListener('mouseup',()=>{keys.right=false;});
+document.getElementById('tzJ').addEventListener('touchstart', e => { e.preventDefault(); triggerJump(); }, {passive:false});
+document.getElementById('tzJ').addEventListener('mousedown', e => { e.preventDefault(); triggerJump(); });
+
+window.addEventListener('keydown', e => { 
+    let ci = document.getElementById('chatTxt'); if (document.activeElement === ci) return; 
+    if (e.key==='ArrowLeft'||e.key==='a') { keys.left=true; p.facing='left'; }
+    if (e.key==='ArrowRight'||e.key==='d') { keys.right=true; p.facing='right'; }
+    if (e.key===' ' || e.key==='ArrowUp' || e.key==='w') { triggerJump(); }
+});
+window.addEventListener('keyup', e => { 
+    if (e.key==='ArrowLeft'||e.key==='a') keys.left=false; 
+    if (e.key==='ArrowRight'||e.key==='d') keys.right=false; 
+});
+
+const chatFabBtn = document.getElementById('chatFabBtn'), chatPopup  = document.getElementById('chatPopup');
+chatFabBtn.onclick = () => chatPopup.classList.toggle('open');
+document.querySelectorAll('.qc-btn').forEach(btn => { btn.onclick = () => { sendChat(btn.textContent); chatPopup.classList.remove('open'); }; });
+document.getElementById('chatSend').onclick = () => { let v = document.getElementById('chatTxt').value.trim(); if (v) { sendChat(v); document.getElementById('chatTxt').value=''; chatPopup.classList.remove('open'); } };
+document.getElementById('chatTxt').addEventListener('keypress', e => { if (e.key==='Enter') { let v = e.target.value.trim(); if (v) { sendChat(v); e.target.value=''; chatPopup.classList.remove('open'); } } });
+document.addEventListener('click', e => { if (!document.getElementById('chatFab').contains(e.target)) chatPopup.classList.remove('open'); });
+
+lbFetch(); loop();
+</script>
+</body>
+</html>
